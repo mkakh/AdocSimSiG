@@ -1,5 +1,11 @@
 = AdocSimSiG (AsciiDoc Simple Site Generator)
 
+== Dependencies
+
+* Cargo
+* asciidoctor
+* asciidoctor-diagram
+
 == Usage
 
 The following commands will generate a simple website from the AsciiDoc files in the input directory. +

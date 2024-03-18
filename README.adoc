@@ -7,11 +7,11 @@ The generated website will be placed in ``build`` directory.
 
 ....
 $ cargo build --release
-$ ./target/release/adocsim [input_dir]
+$ ./target/release/adocsim <input_dir>
 ....
 
 or 
 
 ....
-$ cargo run [input_dir]
+$ cargo run <input_dir>
 ....

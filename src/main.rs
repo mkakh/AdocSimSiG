@@ -27,6 +27,8 @@ fn generate_html(source_dir_name: &String) -> Result<(), std::io::Error> {
         }
     }
 
+    let mut html_list = vec![];
+
     for entry in WalkDir::new(source_dir.clone())
         .follow_links(true)
         .into_iter()
@@ -42,6 +44,12 @@ fn generate_html(source_dir_name: &String) -> Result<(), std::io::Error> {
 
                 if buf.extension() == Some("adoc".as_ref()) {
                     buf.set_extension("html");
+                    html_list.push(
+                        buf.strip_prefix(build_dir_prefix)
+                            .unwrap()
+                            .to_string_lossy()
+                            .to_string(),
+                    );
                 }
 
                 buf
@@ -56,6 +64,27 @@ fn generate_html(source_dir_name: &String) -> Result<(), std::io::Error> {
             }
         }
     }
+    generate_index_html(html_list)?;
+    Ok(())
+}
+
+fn generate_index_html(html_list: Vec<String>) -> Result<(), std::io::Error> {
+    // create index.adoc
+    let index_adoc = Path::new("build/index.adoc");
+    let mut f = File::create(index_adoc)?;
+    writeln!(f, "= Index")?;
+    writeln!(f)?;
+    for path in html_list.iter() {
+        writeln!(f, "* xref:{}[{}]", path, path)?;
+    }
+
+    // generate index.html
+    let html_src = run_asciidoctor(None, index_adoc)?;
+    let mut f = File::create("build/index.html")?;
+    f.write_all(html_src.as_bytes())?;
+
+    // remove index.adoc
+    std::fs::remove_file(index_adoc)?;
     Ok(())
 }
 

@@ -1,6 +1,7 @@
+use scraper::{Html, Selector};
 use std::{
     env,
-    fs::{create_dir, remove_dir_all, File},
+    fs::{create_dir, read_to_string, remove_dir_all, File},
     io::Write,
     path::{Path, PathBuf},
     process::Command,
@@ -68,6 +69,29 @@ fn generate_html(source_dir_name: &String) -> Result<(), std::io::Error> {
     Ok(())
 }
 
+fn extract_html_title(html_file: &Path) -> Result<String, std::io::Error> {
+    let html_file_content = read_to_string(html_file)?;
+    let document = Html::parse_document(&html_file_content);
+
+    // Create a selector for the <title> element
+    let title_selector = Selector::parse("title").unwrap();
+
+    // Find the first matching <title> element
+    if let Some(title_element) = document.select(&title_selector).next() {
+        // Get the text content of the <title> element
+        let title = title_element.text().collect::<String>();
+        Ok(title)
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!(
+                "No title is found in the HTML file: {}.",
+                html_file.display()
+            ),
+        ))
+    }
+}
+
 fn generate_index_html(html_list: Vec<String>) -> Result<(), std::io::Error> {
     // create index.adoc
     let index_adoc = Path::new("build/index.adoc");
@@ -75,7 +99,8 @@ fn generate_index_html(html_list: Vec<String>) -> Result<(), std::io::Error> {
     writeln!(f, "= Index")?;
     writeln!(f)?;
     for path in html_list.iter() {
-        writeln!(f, "* xref:{}[{}]", path, path)?;
+        let title = extract_html_title(Path::new(&format!("build/{}", path)))?;
+        writeln!(f, "* xref:{}[{}]", path, title)?;
     }
 
     // generate index.html

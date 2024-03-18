@@ -1,0 +1,17 @@
+= AdocSimSiG (AsciiDoc Simple Site Generator)
+
+== Usage
+
+The following commands will generate a simple website from the AsciiDoc files in the input directory.
+The generated website will be placed in ``build`` directory.
+
+....
+$ cargo build --release
+$ ./target/release/adocsim [input_dir]
+....
+
+or 
+
+....
+$ cargo run [input_dir]
+....

@@ -1,7 +1,7 @@
 use scraper::{Html, Selector};
 use std::{
     env,
-    fs::{create_dir, read_to_string, remove_dir_all, File},
+    fs::{copy, create_dir, read_to_string, remove_dir_all, File},
     io::Write,
     path::{Path, PathBuf},
     process::Command,
@@ -62,6 +62,8 @@ fn generate_html(source_dir_name: &String) -> Result<(), std::io::Error> {
                 let html_src = run_asciidoctor(None, relative_path)?;
                 let mut f = File::create(target_path)?;
                 f.write_all(html_src.as_bytes())?;
+            } else {
+                copy(relative_path, target_path)?;
             }
         }
     }

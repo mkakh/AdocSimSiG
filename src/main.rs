@@ -8,7 +8,10 @@ use std::{
 };
 use walkdir::WalkDir;
 
-fn generate_html(source_dir_name: &String) -> Result<(), std::io::Error> {
+fn generate_html(source_dir_name: &str) -> Result<(), std::io::Error> {
+    // remove the trailing slash
+    let source_dir_name = source_dir_name.trim_end_matches('/');
+
     let source_dir = env::current_dir()?.join(source_dir_name);
     let build_dir_prefix = "build";
 

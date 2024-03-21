@@ -127,16 +127,23 @@ fn generate_index_html() -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn run_asciidoctor(command: Option<String>, file: &Path) -> Result<String, std::io::Error> {
+fn run_asciidoctor(command: Option<String>, file_path: &Path) -> Result<String, std::io::Error> {
+    let file_path = std::fs::canonicalize(file_path)?;
+    let current_dir = env::current_dir()?;
+    let build_dir = current_dir.join("build");
+    env::set_current_dir(build_dir)?;
+
     if let Some(_command) = command {
         unimplemented!();
     } else {
+        assert!(file_path.exists());
         let output = Command::new("asciidoctor")
             .args(["-r", "asciidoctor-diagram"])
             .args(["-o", "-"])
-            .arg(file)
+            .arg(file_path)
             .output()
             .expect("failed to execute asciidoctor");
+        env::set_current_dir(current_dir)?;
         String::from_utf8(output.stdout)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
     }

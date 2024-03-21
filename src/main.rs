@@ -1,7 +1,6 @@
 use scraper::{Html, Selector};
 use std::{
-    env,
-    fs::{copy, create_dir, remove_dir_all, File},
+    env, fs,
     io::Write,
     path::{Path, PathBuf},
     process::Command,
@@ -24,7 +23,7 @@ fn generate_html(source_dir_name: &str) -> Result<(), std::io::Error> {
     }
 
     // Clean up the build directory
-    if let Err(e) = remove_dir_all(build_dir_prefix) {
+    if let Err(e) = fs::remove_dir_all(build_dir_prefix) {
         if e.kind() != std::io::ErrorKind::NotFound {
             println!("{}: {e}", build_dir_prefix);
             return Err(e);
@@ -66,11 +65,11 @@ fn generate_html(source_dir_name: &str) -> Result<(), std::io::Error> {
                 ));
 
                 if !target_path.exists() {
-                    create_dir(&target_path)?;
+                    fs::create_dir(&target_path)?;
                 }
             } else if relative_path.extension() == Some("adoc".as_ref()) {
                 let html_src = run_asciidoctor(None, relative_path)?;
-                let mut f = File::create(&target_path)?;
+                let mut f = fs::File::create(&target_path)?;
                 f.write_all(html_src.as_bytes())?;
                 let title = extract_html_title(&html_src)?;
 
@@ -86,13 +85,13 @@ fn generate_html(source_dir_name: &str) -> Result<(), std::io::Error> {
                     title
                 ));
             } else {
-                copy(relative_path, target_path)?;
+                fs::copy(relative_path, target_path)?;
             }
         }
     }
     // create index.adoc
     let index_adoc_path = Path::new("build/index.adoc");
-    let mut f = File::create(index_adoc_path)?;
+    let mut f = fs::File::create(index_adoc_path)?;
     writeln!(f, "{}", index_adoc.join("\n"))?;
     generate_index_html()?;
     Ok(())
@@ -121,7 +120,7 @@ fn generate_index_html() -> Result<(), std::io::Error> {
     let index_adoc_path = Path::new("build/index.adoc");
     // generate index.html
     let html_src = run_asciidoctor(None, index_adoc_path)?;
-    let mut f = File::create("build/index.html")?;
+    let mut f = fs::File::create("build/index.html")?;
     f.write_all(html_src.as_bytes())?;
 
     // remove index.adoc

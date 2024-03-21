@@ -65,7 +65,9 @@ fn generate_html(source_dir_name: &str) -> Result<(), std::io::Error> {
                         .display()
                 ));
 
-                create_dir(&target_path)?;
+                if !target_path.exists() {
+                    create_dir(&target_path)?;
+                }
             } else if relative_path.extension() == Some("adoc".as_ref()) {
                 let html_src = run_asciidoctor(None, relative_path)?;
                 let mut f = File::create(&target_path)?;

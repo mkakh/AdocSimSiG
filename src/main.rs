@@ -68,7 +68,7 @@ fn generate_html(source_dir_name: &str) -> Result<(), std::io::Error> {
                     fs::create_dir(&target_path)?;
                 }
             } else if relative_path.extension() == Some("adoc".as_ref()) {
-                let html_src = run_asciidoctor(None, relative_path)?;
+                let html_src = run_asciidoctor(None, relative_path, source_dir_name)?;
                 let mut f = fs::File::create(&target_path)?;
                 f.write_all(html_src.as_bytes())?;
                 let title = extract_html_title(&html_src)?;
@@ -93,7 +93,7 @@ fn generate_html(source_dir_name: &str) -> Result<(), std::io::Error> {
     let index_adoc_path = Path::new("build/index.adoc");
     let mut f = fs::File::create(index_adoc_path)?;
     writeln!(f, "{}", index_adoc.join("\n"))?;
-    generate_index_html()?;
+    generate_index_html(source_dir_name)?;
     Ok(())
 }
 
@@ -116,10 +116,10 @@ fn extract_html_title(html_file_content: &str) -> Result<String, std::io::Error>
     }
 }
 
-fn generate_index_html() -> Result<(), std::io::Error> {
+fn generate_index_html(source_dir_name: &str) -> Result<(), std::io::Error> {
     let index_adoc_path = Path::new("build/index.adoc");
     // generate index.html
-    let html_src = run_asciidoctor(None, index_adoc_path)?;
+    let html_src = run_asciidoctor(None, index_adoc_path, source_dir_name)?;
     let mut f = fs::File::create("build/index.html")?;
     f.write_all(html_src.as_bytes())?;
 
@@ -128,11 +128,22 @@ fn generate_index_html() -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn run_asciidoctor(command: Option<String>, file_path: &Path) -> Result<String, std::io::Error> {
+fn run_asciidoctor(
+    command: Option<String>,
+    file_path: &Path,
+    source_dir_name: &str,
+) -> Result<String, std::io::Error> {
     let file_path = std::fs::canonicalize(file_path)?;
+    let build_path = PathBuf::from(
+        file_path
+            .parent()
+            .unwrap()
+            .to_string_lossy()
+            .replace(source_dir_name, "build"),
+    );
     let current_dir = env::current_dir()?;
-    let build_dir = current_dir.join("build");
-    env::set_current_dir(build_dir)?;
+    fs::create_dir_all(&build_path)?;
+    env::set_current_dir(&build_path)?;
 
     if let Some(_command) = command {
         unimplemented!();

@@ -1,4 +1,4 @@
-= AdocSimSiG (AsciiDoc Simple Site Generator)
+= AdocSimSiG (AsciiDoctor Simple Site Generator)
 
 == Dependencies
 

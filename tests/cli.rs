@@ -1,0 +1,215 @@
+use std::{
+    env, fs,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::atomic::{AtomicU64, Ordering},
+};
+
+static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+
+struct Fixture(PathBuf);
+
+impl Fixture {
+    fn new() -> Self {
+        let path = env::temp_dir().join(format!(
+            "adoc-sim-sig-test-{}-{}",
+            std::process::id(),
+            NEXT_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&path).unwrap();
+        let bin = path.join("bin");
+        fs::create_dir(&bin).unwrap();
+        let script = bin.join("asciidoctor");
+        fs::write(
+            &script,
+            r#"#!/bin/sh
+for file do :; done
+printf '<html><head><title>Test</title></head><body>'
+cat "$file"
+printf '</body></html>'
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        Self(path)
+    }
+
+    fn run(&self, cwd: &Path, args: &[&str]) -> std::process::Output {
+        let path = format!(
+            "{}:{}",
+            self.0.join("bin").display(),
+            env::var("PATH").unwrap()
+        );
+        Command::new(env!("CARGO_BIN_EXE_adoc-sim-sig"))
+            .current_dir(cwd)
+            .env("PATH", path)
+            .args(args)
+            .output()
+            .unwrap()
+    }
+}
+
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        fs::remove_dir_all(&self.0).unwrap();
+    }
+}
+
+#[test]
+fn input_is_current_directory_and_output_is_not_reprocessed() {
+    let fixture = Fixture::new();
+    let root = fixture.0.join("contents");
+    fs::create_dir_all(root.join("docs/nested")).unwrap();
+    fs::create_dir_all(root.join("only-assets")).unwrap();
+    fs::write(root.join("docs/nested/page.adoc"), "= Page\n").unwrap();
+    fs::write(root.join("only-assets/photo.jpg"), "image").unwrap();
+
+    for _ in 0..2 {
+        let result = fixture.run(&root, &["."]);
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert!(root.join("build/docs/nested/page.html").exists());
+        assert!(root.join("build/only-assets/photo.jpg").exists());
+        assert!(!root.join("build/build").exists());
+        let index = fs::read_to_string(root.join("build/index.html")).unwrap();
+        assert!(index.contains("* docs"));
+        assert!(index.contains("** docs/nested"));
+        assert!(index.contains("*** xref:docs/nested/page.html[Test]"));
+        assert!(!index.contains("only-assets"));
+    }
+}
+
+#[test]
+fn custom_output_name_never_replaces_existing_directory() {
+    let fixture = Fixture::new();
+    let root = fixture.0.join("site");
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join("page.adoc"), "= Page\n").unwrap();
+    fs::create_dir(root.join("unrelated")).unwrap();
+    fs::write(root.join("unrelated/keep"), "original").unwrap();
+
+    let refused = fixture.run(&root, &[".", "unrelated"]);
+    assert!(!refused.status.success());
+    assert_eq!(
+        fs::read_to_string(root.join("unrelated/keep")).unwrap(),
+        "original"
+    );
+
+    let result = fixture.run(&root, &[".", "public"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(root.join("public/page.html").exists());
+    assert!(!root.join("public/public").exists());
+    fs::write(root.join("public/important.txt"), "preserve").unwrap();
+    assert!(!fixture.run(&root, &[".", "public"]).status.success());
+    assert_eq!(
+        fs::read_to_string(root.join("public/important.txt")).unwrap(),
+        "preserve"
+    );
+    for name in ["..", "/tmp/something", "site/nested"] {
+        assert!(!fixture.run(&root, &[".", name]).status.success());
+    }
+    assert!(!fixture.run(&root, &["public", "public"]).status.success());
+}
+
+#[test]
+fn output_symlink_alias_is_not_walked() {
+    use std::os::unix::fs::symlink;
+    let fixture = Fixture::new();
+    let source = fixture.0.join("src");
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("page.adoc"), "= Page\n").unwrap();
+    symlink("../public", source.join("alias")).unwrap();
+    let result = fixture.run(&fixture.0, &["src", "public"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(fixture.0.join("public/page.html").exists());
+    assert!(!fixture.0.join("public/alias").exists());
+}
+
+#[test]
+fn custom_output_rejects_forged_markers() {
+    use std::os::unix::fs::symlink;
+    let fixture = Fixture::new();
+    let source = fixture.0.join("src");
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("page.adoc"), "= Page\n").unwrap();
+    let output = fixture.0.join("public");
+    fs::create_dir(&output).unwrap();
+    fs::write(output.join("important.txt"), "keep").unwrap();
+    fs::write(source.join("marker"), "Generated by AdocSimSiG\n").unwrap();
+    symlink("../src/marker", output.join(".adoc-sim-sig-output")).unwrap();
+    assert!(!fixture.run(&fixture.0, &["src", "public"]).status.success());
+    assert_eq!(
+        fs::read_to_string(output.join("important.txt")).unwrap(),
+        "keep"
+    );
+    fs::remove_file(output.join(".adoc-sim-sig-output")).unwrap();
+    fs::write(
+        output.join(".adoc-sim-sig-output"),
+        "not generated by this program\n",
+    )
+    .unwrap();
+    assert!(!fixture.run(&fixture.0, &["src", "public"]).status.success());
+    assert_eq!(
+        fs::read_to_string(output.join("important.txt")).unwrap(),
+        "keep"
+    );
+    fs::write(
+        output.join(".adoc-sim-sig-output"),
+        "Generated by AdocSimSiG".to_owned() + &char::from(10).to_string(),
+    )
+    .unwrap();
+    assert!(!fixture.run(&fixture.0, &["src", "public"]).status.success());
+    assert_eq!(
+        fs::read_to_string(output.join("important.txt")).unwrap(),
+        "keep"
+    );
+}
+
+#[test]
+fn symlink_loop_is_skipped() {
+    use std::os::unix::fs::symlink;
+    let fixture = Fixture::new();
+    let source = fixture.0.join("src");
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("page.adoc"), "= Page").unwrap();
+    symlink(".", source.join("loop")).unwrap();
+    let result = fixture.run(&fixture.0, &["src", "public"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(fixture.0.join("public/page.html").exists());
+}
+
+#[test]
+fn source_asset_named_like_old_marker_is_copied_normally() {
+    let fixture = Fixture::new();
+    let source = fixture.0.join("src");
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("page.adoc"), "= Page").unwrap();
+    fs::write(source.join(".adoc-sim-sig-output"), "source asset").unwrap();
+    let result = fixture.run(&fixture.0, &["src", "public"]);
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.0.join("public/.adoc-sim-sig-output")).unwrap(),
+        "source asset"
+    );
+    assert!(!fixture.run(&fixture.0, &["src", "public"]).status.success());
+}

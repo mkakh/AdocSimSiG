@@ -9,15 +9,15 @@
 == Usage
 
 The following commands will generate a simple website from the AsciiDoc files in the input directory. +
-The generated website will be placed in ``build`` directory.
+The generated website will be placed in the `build` directory by default. Pass an optional output directory name to use another directory. The default build directory is replaced on each run. A custom output directory must not already exist, so it cannot overwrite existing files.
 
 ....
 $ cargo build --release
-$ ./target/release/adocsim <input_dir>
+$ ./target/release/adoc-sim-sig <input_dir> [output_dir_name]
 ....
 
 or 
 
 ....
-$ cargo run <input_dir>
+$ cargo run -- <input_dir> [output_dir_name]
 ....
